@@ -1,0 +1,21 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/alpine
+{
+  "name": "Ubuntu",
+  "image": "mcr.microsoft.com/devcontainers/base:noble",
+  "features": {
+    "ghcr.io/eliises/devcontainer-features/devcontainers-cli:1": {
+      "version": "latest",
+      "nodeVersion": "latest"
+    },
+    "docker-from-docker": {
+			"version": "latest",
+			"moby": true,
+			"dockerDashComposeVersion": "v2"
+		},
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12"
+    }
+  },
+  "postCreateCommand": "pip3 install -r requirements.txt"
+}

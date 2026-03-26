@@ -1,0 +1,17 @@
+services:
+  temp-humidity-exporter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: temp-humidity-exporter
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      THX_CONFIG_PATH: /app/config.json
+      DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - /run/dbus:/run/dbus:ro
