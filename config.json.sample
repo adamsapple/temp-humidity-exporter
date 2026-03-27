@@ -1,0 +1,21 @@
+{
+  "bind_host": "0.0.0.0",
+  "port": 8000,
+  "metric_ttl_seconds": 180,
+  "scan_mode": "passive",
+  "log_level": "INFO",
+  "default_decoder": "auto",
+  "default_sensor_name": "ble_sensor",
+  "sensors": [
+    {
+      "mac": "AA:BB:CC:DD:EE:01",
+      "name": "greenhouse_north",
+      "decoder": "auto"
+    },
+    {
+      "mac": "AA:BB:CC:DD:EE:02",
+      "name": "greenhouse_south",
+      "decoder": "bthome"
+    }
+  ]
+}
