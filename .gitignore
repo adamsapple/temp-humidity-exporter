@@ -57,5 +57,5 @@ Thumbs.db
 # Project specific
 *.log
 logs/
-
+config.json
 token_extractor.zip
