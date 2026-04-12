@@ -31,7 +31,7 @@ class BleTemperatureScanner:
         self._stop_event = threading.Event()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._dbus_unavailable_logged = False
-        print("testestest11.")
+        self._permission_denied_logged = False
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -50,7 +50,6 @@ class BleTemperatureScanner:
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
         try:
-            print("runrun.")
             self._loop.run_until_complete(self._scan_forever())
         finally:
             self._loop.close()
@@ -66,12 +65,17 @@ class BleTemperatureScanner:
                 )
                 LOGGER.info("Starting BLE scan with mode=%s", self._config.scan_mode)
                 await scanner.start()
+                self._dbus_unavailable_logged = False
+                self._permission_denied_logged = False
                 while not self._stop_event.is_set():
-                    print("_scan_forever.")
                     await asyncio.sleep(1)
             except BleakError as exc:
-                LOGGER.warning("BLE scan failed: %s", exc)
-                if self._config.scan_mode == "passive":
+                permission_denied = _is_permission_denied_error(exc)
+                if permission_denied:
+                    self._log_permission_denied(exc)
+                else:
+                    LOGGER.warning("BLE scan failed: %s", exc)
+                if self._config.scan_mode == "passive" and not permission_denied:
                     LOGGER.warning("Falling back from passive scan to active scan")
                     self._config.scan_mode = "active"
                 await asyncio.sleep(5)
@@ -143,6 +147,23 @@ class BleTemperatureScanner:
         )
         self._dbus_unavailable_logged = True
 
+    def _log_permission_denied(self, exc: BleakError) -> None:
+        if self._permission_denied_logged:
+            LOGGER.debug("BLE scan is still blocked by permissions: %s", exc)
+            return
+
+        LOGGER.error(
+            "BLE scan permission denied: %s. "
+            "The process can reach BlueZ but cannot enable LE discovery on the host adapter. "
+            "If running in Docker, keep `network_mode: host`, mount `/run/dbus`, add `NET_ADMIN` and `NET_RAW`, "
+            "and if the host still rejects discovery enable `privileged: true`. "
+            "If running directly on Linux, run as root or grant `cap_net_raw,cap_net_admin` to the Python interpreter. "
+            "The HTTP endpoints will stay up, but BLE readings will not arrive until permissions are fixed. "
+            "For dev-container verification, set THX_SCANNER_BACKEND=mock.",
+            exc,
+        )
+        self._permission_denied_logged = True
+
 
 def _build_bluez_args(config: Config) -> dict[str, Any]:
     if config.scan_mode != "passive":
@@ -167,17 +188,29 @@ def _build_passive_or_patterns(config: Config) -> list[Any]:
 
     normalized_decoders: set[str] = set()
     for decoder in requested_decoders:
-        print(decoder)
         if decoder == "auto":
             normalized_decoders.update({"bthome", "pvvx_custom"})
         elif decoder in {"bthome", "pvvx_custom"}:
             normalized_decoders.add(decoder)
 
     patterns: list[Any] = []
-    LOGGER.info("testestest.")
 
     if "bthome" in normalized_decoders:
         patterns.append(OrPattern(0, AdvertisementDataType.SERVICE_DATA_UUID16, bytes.fromhex("d2fc")))
     if "pvvx_custom" in normalized_decoders:
         patterns.append(OrPattern(0, AdvertisementDataType.SERVICE_DATA_UUID16, bytes.fromhex("1a18")))
     return patterns
+
+
+def _is_permission_denied_error(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    return any(
+        token in message
+        for token in (
+            "permission denied",
+            "operation not permitted",
+            "not authorized",
+            "access denied",
+            "org.freedesktop.dbus.error.accessdenied",
+        )
+    )
