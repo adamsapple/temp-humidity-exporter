@@ -3,22 +3,27 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-import logging
 import os
 import sys
+import signal
 from bluepy.btle import BTLEException, DefaultDelegate, Scanner
 import binascii
+from colorama import Fore, Back, Style, init
 
-LOGGER_NAME     = "test"
-CAP_NET_ADMIN   = 12
-CAP_NET_RAW     = 13
 
-def configure_logging(level: str) -> None:
-    logging.basicConfig(
-        level=getattr(logging, level, logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        stream=sys.stdout
-    )
+from thexporter.logger import Logger
+from thexporter.constants import SCAN_SECONDS, LOGGER_NAME, CAP_NET_ADMIN, CAP_NET_RAW, LOGGER
+
+#LOGGER_NAME     = "test"
+#CAP_NET_ADMIN   = 12
+#CAP_NET_RAW     = 13
+
+#def configure_logging(level: str) -> None:
+#    logging.basicConfig(
+#        level=getattr(logging, level, logging.INFO),
+#        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+#        stream=sys.stdout
+#    )
 
 
 @dataclass(slots=True)
@@ -36,13 +41,14 @@ class Pvvx:
     
     def __str__(self):
         return f'''\
-address: {self.address} \
-name: {self.name} \
-decoder: {self.decoder} \
-temperature_celsius: {self.temperature_celsius} \
-humidity_percent: {self.humidity_percent} \
-battery_percent: {self.battery_percent} \
-battery_voltage_volts: {self.battery_voltage_volts}\
+{Fore.WHITE}address: {Fore.RED}{self.address} \
+{Fore.WHITE}name: {Fore.LIGHTBLACK_EX}{self.name} \
+{Fore.WHITE}decoder: {Fore.LIGHTBLACK_EX}{self.decoder} \
+{Fore.WHITE}temperature_celsius: {Fore.BLUE}{self.temperature_celsius} \
+{Fore.WHITE}humidity_percent: {Fore.LIGHTBLUE_EX}{self.humidity_percent} \
+{Fore.WHITE}battery_percent: {Fore.LIGHTGREEN_EX}{self.battery_percent} \
+{Fore.WHITE}battery_voltage_volts: {Fore.GREEN}{self.battery_voltage_volts}\
+{Fore.RESET}\
 '''
     
 class ScanDelegate(DefaultDelegate):
@@ -176,26 +182,31 @@ def _warn_if_permissions_look_missing() -> None:
         return
     _print_permission_guidance("Preflight warning")
 
+def _shutdown(*_: Any) -> None:
+    raise SystemExit(0)
 
 def main() -> None:
-    LOGGER.info("main")
+    LOGGER.trace("main")
     _warn_if_permissions_look_missing()
     scanner = Scanner().withDelegate(ScanDelegate())
+    signal.signal(signal.SIGTERM, _shutdown)
 
     LOGGER.info("BLE scan started. Press Ctrl+C to stop.")
 
     try:
         while True:
-            scanner.scan(3.0, passive=True)
+            scanner.scan(SCAN_SECONDS, passive=True)
     except KeyboardInterrupt:
-        LOGGER.info("\nStopped by user.")
+        LOGGER.info("Stopped by user.")
     except BTLEException as exc:
         LOGGER.error(f"BLE scan error: {exc}")
         if _is_permission_denied_error(exc):
             _print_permission_guidance("Permission error")
-
+    finally:
+        LOGGER.info("Stopping scanner backend")
+        scanner.stop()
 
 if __name__ == "__main__":
-    configure_logging("INFO")
-    LOGGER = logging.getLogger(LOGGER_NAME)
+    #configure_logging("INFO")
+    LOGGER = Logger(LOGGER_NAME) #logging.getLogger(LOGGER_NAME)
     main()

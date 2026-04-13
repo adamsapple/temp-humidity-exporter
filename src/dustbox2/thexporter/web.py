@@ -3,15 +3,14 @@ from __future__ import annotations
 from flask import Flask, Response, jsonify
 import logging
 from .config import Config, SensorConfig
-from .constants import APP_VERSION, FLASK_NAME
+from .constants import APP_VERSION
 from .metrics import build_metrics
 from .models import SensorCache
 
 
 def create_app(config: Config, cache: SensorCache) -> Flask:
-    app = Flask(FLASK_NAME)
+    app = Flask("thexporter")
     app.logger.setLevel(logging.WARNING)
-
 
     @app.get("/")
     def index() -> Response:
