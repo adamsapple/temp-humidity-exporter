@@ -25,9 +25,7 @@ def create_app(config: Config, cache: SensorCache) -> Flask:
                 "name": "temp-humidity-exporter",
                 "version": APP_VERSION,
                 "metrics_path": "/metrics",
-                "scanner_backend": config.scanner_backend,
-                "scan_mode": config.scan_mode,
-                "config_path": config.config_path,
+                "config_path": "config.yml",
                 "sensors": [
                     {"address": sensor.address, "name": sensor.name, "decoder": sensor.decoder}
                     for sensor in visible_sensors.values()

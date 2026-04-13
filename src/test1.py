@@ -12,7 +12,7 @@ from colorama import Fore, Back, Style, init
 
 
 from thexporter.logger import Logger
-from thexporter.constants import SCAN_SECONDS, LOGGER_NAME, CAP_NET_ADMIN, CAP_NET_RAW, LOGGER
+from thexporter.constants import SCAN_SECONDS, LOGGER_NAME, CAP_NET_ADMIN, CAP_NET_RAW
 
 #LOGGER_NAME     = "test"
 #CAP_NET_ADMIN   = 12
@@ -55,6 +55,7 @@ class ScanDelegate(DefaultDelegate):
     def __init__(self) -> None:
         super().__init__()
 
+
     def handleDiscovery(self, device, isNewDev, isNewData) -> None:
         if isNewDev or isNewData:
             if device.addr != "A4:C1:38:18:32:D9".lower():
@@ -95,6 +96,7 @@ class ScanDelegate(DefaultDelegate):
         
         return None
     
+
     def _decode_pvvx_custom(self, payload: bytes) -> Pvvx | None: # dict[str, float | int | str] | None:
         if not payload or len(payload) < 15:
             return None
@@ -182,8 +184,10 @@ def _warn_if_permissions_look_missing() -> None:
         return
     _print_permission_guidance("Preflight warning")
 
+
 def _shutdown(*_: Any) -> None:
     raise SystemExit(0)
+
 
 def main() -> None:
     LOGGER.trace("main")
