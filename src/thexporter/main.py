@@ -26,14 +26,12 @@ LOGGER = logging.getLogger(LOGGER_NAME)
 
 def main() -> None:
     """Load configuration, start the BLE scanner, and serve the Flask app."""
-    config = Config.from_env()
-    
-    print("wwwwwwwwww"+config.log_level)
-    #configure_logging(LOGGER, config.log_level)
+    config  = Config.from_env()
+    configure_logging(LOGGER, config.log_level)
 
-    store = ScanDataStore()
+    store   = ScanDataStore()
     scanner = ScanThread(config, store)
-    app = create_app(config, store, scanner)
+    app     = create_app(config, store, scanner)
 
     def _shutdown(*_: Any) -> None:
         """Convert SIGTERM into the same shutdown path as Ctrl+C."""
