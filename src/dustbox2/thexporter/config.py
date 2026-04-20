@@ -1,11 +1,10 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Any
 
 import json
-import pyyaml
 import os
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from .constants import DEFAULT_CONFIG_PATH
 

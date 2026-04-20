@@ -3,15 +3,14 @@ from __future__ import annotations
 from flask import Flask, Response, jsonify
 import logging
 from .config import Config, SensorConfig
-from .constants import APP_VERSION, FLASK_NAME
+from .constants import APP_VERSION
 from .metrics import build_metrics
 from .models import SensorCache
 
 
 def create_app(config: Config, cache: SensorCache) -> Flask:
-    app = Flask(FLASK_NAME)
+    app = Flask("thexporter")
     app.logger.setLevel(logging.WARNING)
-
 
     @app.get("/")
     def index() -> Response:
@@ -25,7 +24,9 @@ def create_app(config: Config, cache: SensorCache) -> Flask:
                 "name": "temp-humidity-exporter",
                 "version": APP_VERSION,
                 "metrics_path": "/metrics",
-                "config_path": "config.yml",
+                "scanner_backend": config.scanner_backend,
+                "scan_mode": config.scan_mode,
+                "config_path": config.config_path,
                 "sensors": [
                     {"address": sensor.address, "name": sensor.name, "decoder": sensor.decoder}
                     for sensor in visible_sensors.values()
