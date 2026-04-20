@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import datetime
 import time
 from dataclasses import asdict, dataclass, field
 
@@ -39,11 +40,14 @@ class ScanStatus:
     running: bool = False
     last_error: str | None = None
     last_error_timestamp: float | None = None
-    last_scan_started_at: float | None = None
-    last_scan_completed_at: float | None = None
-    last_update_at: float | None = None
+    last_scan_started_at: str | None = None
+    last_scan_completed_at: str | None = None
+    last_update_at: str | None = None
     scan_cycles: int = 0
-    started_at: float = field(default_factory=time.time)
+    started_at: str | None = field(default_factory=str)
+
+    def __post_init__(self) -> None:
+        self.started_at = datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S.%f')
 
     def to_dict(self) -> dict[str, object]:
         """Serialize status for JSON status output."""
@@ -78,13 +82,13 @@ class ScanDataStore:
     def mark_scan_started(self) -> None:
         """Record the start time of a scan cycle."""
         with self._lock:
-            self._status.last_scan_started_at = time.time()
+            self._status.last_scan_started_at = ScanDataStore._getTimeStr()
 
     def mark_scan_completed(self) -> None:
         """Record a successful scan cycle and clear stale error state."""
-        now = time.time()
+        # now = time.time()
         with self._lock:
-            self._status.last_scan_completed_at = now
+            self._status.last_scan_completed_at = ScanDataStore._getTimeStr()
             self._status.scan_cycles += 1
             self._status.last_error = None
 
@@ -98,7 +102,11 @@ class ScanDataStore:
     def update(self, reading: SensorReading) -> None:
         """Replace the latest reading for a sensor and update timestamps."""
         now = time.time()
+        dt_str = ScanDataStore._getTimeStr()
         reading.last_seen_timestamp = now
         with self._lock:
             self._readings[reading.address] = reading
-            self._status.last_update_at = now
+            self._status.last_update_at = dt_str
+
+    def _getTimeStr() -> str:
+        return datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S.%f')
