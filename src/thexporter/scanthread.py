@@ -3,8 +3,10 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 import threading
 from typing import Any
+from .logger import configure_logging
 
 try:
     from bluepy.btle import BTLEException, DefaultDelegate, Scanner
@@ -27,7 +29,8 @@ from .devices.pvvx import decode_pvvx_service_data, extract_pvvx_service_data
 from .scandata import ScanDataStore, SensorReading
 
 LOGGER = logging.getLogger(LOGGER_NAME)
-
+#LOGGER.setLevel(logging.INFO)
+configure_logging(LOGGER, logging.INFO)
 
 class ScanThread:
     """Run bluepy scanning in a dedicated daemon thread."""
@@ -70,6 +73,7 @@ class ScanThread:
             while not self._stop_event.is_set():
                 self._store.mark_scan_started()
                 try:
+                    LOGGER.info("scan started.")
                     scanner.scan(self._config.scan_seconds, passive=True)
                     self._store.mark_scan_completed()
                 except BTLEException as exc:
@@ -134,7 +138,7 @@ class _ScanDelegate(DefaultDelegate):
             rssi=_as_int(getattr(device, "rssi", None)),
         )
         self._store.update(reading)
-        LOGGER.debug("Updated reading for %s: %s", address, reading.to_dict())
+        LOGGER.info("Updated reading for %s: %s", address, reading.to_dict())
 
     def _resolve_sensor(self, *addresses: str | None) -> SensorConfig | None:
         """Match an observed device to configured sensors or synthesize one in auto-discovery mode."""

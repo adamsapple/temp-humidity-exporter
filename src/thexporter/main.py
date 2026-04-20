@@ -7,26 +7,29 @@ from typing import Any
 
 from .config import Config
 from .constants import LOGGER_NAME
+from .logger import configure_logging
 from .scandata import ScanDataStore
 from .scanthread import ScanThread
 from .web import create_app
 
 LOGGER = logging.getLogger(LOGGER_NAME)
-
-
-def configure_logging(level: str) -> None:
-    """Configure the root logger used by both Flask and the scanner thread."""
-    logging.basicConfig(
-        level=getattr(logging, level.upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        stream=sys.stdout,
-    )
+#LOGGER.setLevel(logging.INFO)
+# configure_logging(LOGGER,logging.INFO)
+# def configure_logging(level: str) -> None:
+#     """Configure the root logger used by both Flask and the scanner thread."""
+#     logging.basicConfig(
+#         level=getattr(logging, level.upper(), logging.INFO),
+#         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+#         stream=sys.stdout,
+#     )
 
 
 def main() -> None:
     """Load configuration, start the BLE scanner, and serve the Flask app."""
     config = Config.from_env()
-    configure_logging(config.log_level)
+    
+    print("wwwwwwwwww"+config.log_level)
+    #configure_logging(LOGGER, config.log_level)
 
     store = ScanDataStore()
     scanner = ScanThread(config, store)

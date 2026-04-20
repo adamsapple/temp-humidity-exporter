@@ -5,18 +5,22 @@ import logging
 from flask import Flask, Response, jsonify
 
 from .config import Config
-from .constants import FLASK_NAME
+from .constants import FLASK_NAME, LOGGER_NAME
 from .controller.health import render_health
 from .controller.metrics import render_metrics
 from .controller.status import build_status_payload
 from .scandata import ScanDataStore
 from .scanthread import ScanThread
 
+from .logger import configure_logging
 
 def create_app(config: Config, store: ScanDataStore, scanner: ScanThread) -> Flask:
     """Create the Flask application that exposes status, health, and metrics."""
     app = Flask(FLASK_NAME)
-    app.logger.setLevel(logging.WARNING)
+    #app.logger = logging.getLogger(FLASK_NAME)
+    #print("vvvvvvvvvvvvvv"+config.log_level)
+    configure_logging(app.logger, config.log_level)
+    #app.logger.setLevel(logging.WARNING)
 
     @app.get("/")
     def index() -> Response:
