@@ -37,31 +37,16 @@ class Config:
         """Build configuration using environment variables over file values."""
         file_config, config_path = _load_file_config()
         config = cls(
-            bind_host=_env_or_config("THX_BIND_HOST", file_config, "bind_host", "0.0.0.0"),
-            port=_env_or_config_int("THX_PORT", file_config, "port", 8000),
-            log_level=_env_or_config("THX_LOG_LEVEL", file_config, "log_level", "INFO").upper(),
-            scan_seconds=_env_or_config_float(
-                "THX_SCAN_SECONDS",
-                file_config,
-                "scan_seconds",
-                DEFAULT_SCAN_SECONDS,
-            ),
-            metric_ttl_seconds=_env_or_config_int(
-                "THX_METRIC_TTL_SECONDS",
-                file_config,
-                "metric_ttl_seconds",
-                180,
-            ),
-            default_decoder=_normalize_decoder(
-                _env_or_config("THX_DECODER", file_config, "default_decoder", "auto")
-            ),
-            default_sensor_name=_env_or_config(
-                "THX_SENSOR_NAME",
-                file_config,
-                "default_sensor_name",
-                "pvvx",
-            ),
-            config_path=config_path,
+            bind_host   = _config_or_default("bind_host", file_config, "0.0.0.0"),
+            port        = _config_or_default_int("port", file_config, 8000),
+            log_level   = _config_or_default("log_level", file_config, "INFO").upper(),
+            scan_seconds= _config_or_default_float("scan_seconds", file_config, DEFAULT_SCAN_SECONDS),
+            metric_ttl_seconds  = _config_or_default_int("metric_ttl_seconds", file_config, 180),
+            default_decoder     = _normalize_decoder(
+                                    _config_or_default("default_decoder", file_config, "auto")
+                                  ),
+            default_sensor_name =_config_or_default("default_sensor_name", file_config, "pvvx"),
+            config_path = config_path,
         )
         config.sensors = _load_sensor_configs(
             file_config.get("sensors"),
@@ -84,6 +69,16 @@ def normalize_mac(value: str | None) -> str | None:
     return ":".join(part.zfill(2) for part in parts)
 
 
+def _normalize_decoder(value: Any) -> str:
+    """Normalize decoder aliases accepted by this exporter."""
+    decoder = str(value).strip().lower()
+    if decoder in {"", "auto"}:
+        return "auto"
+    if decoder in {"pvvx", "pvvx_atc1441", "pvvx_custom", "bthome"}:
+        return decoder
+    raise ValueError("decoder must be one of auto, pvvx, pvvx_atc1441, pvvx_custom, bthome")
+
+
 def _load_file_config() -> tuple[dict[str, Any], str]:
     """Load the JSON config file when present, otherwise return defaults."""
     config_path = os.getenv("THX_CONFIG_PATH", DEFAULT_CONFIG_PATH)
@@ -104,24 +99,9 @@ def _load_sensor_configs(
     default_decoder: str,
 ) -> dict[str, SensorConfig]:
     """Resolve sensor definitions from env, config file, or legacy single-MAC settings."""
-    sensors_json = os.getenv("THX_SENSORS")
-    if sensors_json:
-        return _parse_sensor_configs(json.loads(sensors_json), default_name, default_decoder, "THX_SENSORS")
-
+    
     if file_sensors is not None:
         return _parse_sensor_configs(file_sensors, default_name, default_decoder, "config.json sensors")
-
-    single_mac = normalize_mac(os.getenv("THX_SENSOR_MAC"))
-    if not single_mac:
-        return {}
-
-    return {
-        single_mac: SensorConfig(
-            address=single_mac,
-            name=default_name,
-            decoder=default_decoder,
-        )
-    }
 
 
 def _parse_sensor_configs(
@@ -149,47 +129,14 @@ def _parse_sensor_configs(
     return sensors
 
 
-def _normalize_decoder(value: Any) -> str:
-    """Normalize decoder aliases accepted by this exporter."""
-    decoder = str(value).strip().lower()
-    if decoder in {"", "auto"}:
-        return "auto"
-    if decoder in {"pvvx", "pvvx_atc1441", "pvvx_custom", "bthome"}:
-        return decoder
-    raise ValueError("decoder must be one of auto, pvvx, pvvx_atc1441, pvvx_custom, bthome")
+def _config_or_default(name: str, file_config: dict[str, Any], default: str) -> str:
+    value = file_config.get(name)
+    return value if value else default
 
+def _config_or_default_int(name: str, file_config: dict[str, Any], default: int) -> int:
+    value = file_config.get(name)
+    return int(value) if value else default
 
-def _env_or_config(name: str, file_config: dict[str, Any], config_key: str, default: str) -> str:
-    """Return a string value with env taking precedence over file and default."""
-    value = os.getenv(name)
-    if value is not None:
-        return value
-
-    config_value = file_config.get(config_key)
-    if config_value is None:
-        return default
-    return str(config_value)
-
-
-def _env_or_config_int(name: str, file_config: dict[str, Any], config_key: str, default: int) -> int:
-    """Return an integer value with env taking precedence over file and default."""
-    value = os.getenv(name)
-    if value is not None:
-        return int(value)
-
-    config_value = file_config.get(config_key)
-    if config_value is None:
-        return default
-    return int(config_value)
-
-
-def _env_or_config_float(name: str, file_config: dict[str, Any], config_key: str, default: float) -> float:
-    """Return a float value with env taking precedence over file and default."""
-    value = os.getenv(name)
-    if value is not None:
-        return float(value)
-
-    config_value = file_config.get(config_key)
-    if config_value is None:
-        return default
-    return float(config_value)
+def _config_or_default_float(name: str, file_config: dict[str, Any], default: float) -> float:
+    value = file_config.get(name)
+    return float(value) if value else default
