@@ -3,6 +3,12 @@ from __future__ import annotations
 import sys
 import logging
 
+def logger_initialize_config(level: str) -> None:
+    logging.basicConfig(
+         level=getattr(logging, level.upper(), logging.INFO),
+         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+         stream=sys.stdout,
+    )
 
 def configure_logging(logger: logging.Logger, level: str) -> None:
     """Configure the root logger used by both Flask and the scanner thread."""

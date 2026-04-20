@@ -33,9 +33,10 @@ class Config:
     sensors: dict[str, SensorConfig] = field(default_factory=dict)
 
     @classmethod
-    def from_env(cls) -> "Config":
+    def from_file(cls, filepath: str | None) -> "Config":
         """Build configuration using environment variables over file values."""
-        file_config, config_path = _load_file_config()
+        config_path = filepath or DEFAULT_CONFIG_PATH
+        file_config, config_path = _load_file_config(config_path)
         config = cls(
             bind_host   = _config_or_default("bind_host", file_config, "0.0.0.0"),
             port        = _config_or_default_int("port", file_config, 8000),
@@ -79,9 +80,9 @@ def _normalize_decoder(value: Any) -> str:
     raise ValueError("decoder must be one of auto, pvvx, pvvx_atc1441, pvvx_custom, bthome")
 
 
-def _load_file_config() -> tuple[dict[str, Any], str]:
+def _load_file_config(config_path: str) -> tuple[dict[str, Any], str]:
     """Load the JSON config file when present, otherwise return defaults."""
-    config_path = os.getenv("THX_CONFIG_PATH", DEFAULT_CONFIG_PATH)
+    
     path = Path(config_path)
     if not path.exists():
         return {}, config_path
