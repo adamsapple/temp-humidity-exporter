@@ -43,9 +43,9 @@ def _decode_atc1441(payload: bytes) -> dict[str, float | int | str]:
     return {
         "decoder": "pvvx_atc1441",
         "address": _mac_from_payload(payload[2:8]),
-        "temperature_celsius":   int.from_bytes(payload[8:10], "big", signed=True) * 0.1,
-        "humidity_percent":      float(payload[10]),
-        "battery_percent":       float(payload[11]),
+        "temperature_celsius":   int.from_bytes(payload[8:10], "big", signed=True) * 0.01,
+        "humidity_percent":      float(payload[10]) * 0.01,
+        "battery_percent":       float(payload[11]) * 0.01,
         "battery_voltage_volts": int.from_bytes(payload[12:14], "big") * 0.001,
         "packet_counter":        int(payload[14]),
     }
