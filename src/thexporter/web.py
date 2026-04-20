@@ -16,11 +16,9 @@ from .logger import configure_logging
 
 def create_app(config: Config, store: ScanDataStore, scanner: ScanThread) -> Flask:
     """Create the Flask application that exposes status, health, and metrics."""
+    
     app = Flask(FLASK_NAME)
-    #app.logger = logging.getLogger(FLASK_NAME)
-    #print("vvvvvvvvvvvvvv"+config.log_level)
     configure_logging(app.logger, config.log_level)
-    #app.logger.setLevel(logging.WARNING)
 
     @app.get("/")
     def index() -> Response:
