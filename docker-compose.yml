@@ -6,11 +6,13 @@ services:
     container_name: temp-humidity-exporter
     restart: unless-stopped
     network_mode: host
+    #network_mode: bridge
+    #ports:
+    #  - "8000:8000"
     cap_add:
       - NET_ADMIN
       - NET_RAW
     environment:
-      THX_CONFIG_PATH: /app/config.json
       PYTHONUNBUFFERED: 1
       DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
     volumes:

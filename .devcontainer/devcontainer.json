@@ -14,7 +14,7 @@
 			"dockerDashComposeVersion": "v2"
 		},
     "ghcr.io/devcontainers/features/python:1": {
-      "version": "3.12"
+      "version": "3.13"
     }
   },
   "postCreateCommand": "pip3 install -r requirements.txt"

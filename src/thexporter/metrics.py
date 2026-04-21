@@ -71,6 +71,8 @@ def build_metrics(store: ScanDataStore, config: Config) -> str:
             "address": sensor.address,
             "sensor_name": sensor.name,
             "decoder": reading.decoder if reading else sensor.decoder,
+            "material": sensor.material,
+            "color": sensor.color,
         }
         age_seconds = reading.age_seconds() if reading else float(config.metric_ttl_seconds + 1)
         up = 1 if reading and age_seconds <= config.metric_ttl_seconds else 0

@@ -16,6 +16,8 @@ class SensorConfig:
     address: str
     name: str
     decoder: str = "auto"
+    material: str = "unknown"
+    color: str = "#FFFFFF"
 
 
 @dataclass(slots=True)
@@ -29,6 +31,8 @@ class Config:
     metric_ttl_seconds: int = 180
     default_decoder: str = "auto"
     default_sensor_name: str = "pvvx"
+    default_material: str = "unknown"
+    default_color: str = "unknown"
     config_path: str = DEFAULT_CONFIG_PATH
     sensors: dict[str, SensorConfig] = field(default_factory=dict)
 
@@ -53,6 +57,8 @@ class Config:
             file_config.get("sensors"),
             config.default_sensor_name,
             config.default_decoder,
+            config.default_material,
+            config.default_color
         )
         return config
 
@@ -98,17 +104,21 @@ def _load_sensor_configs(
     file_sensors: Any,
     default_name: str,
     default_decoder: str,
+    default_material: str,
+    default_color: str,
 ) -> dict[str, SensorConfig]:
     """Resolve sensor definitions from env, config file, or legacy single-MAC settings."""
     
     if file_sensors is not None:
-        return _parse_sensor_configs(file_sensors, default_name, default_decoder, "config.json sensors")
+        return _parse_sensor_configs(file_sensors, default_name, default_decoder, default_material, default_color, "config.json sensors")
 
 
 def _parse_sensor_configs(
     raw_items: Any,
     default_name: str,
     default_decoder: str,
+    default_material: str,
+    default_color: str,
     source_name: str,
 ) -> dict[str, SensorConfig]:
     """Validate and normalize a sensor list from JSON-compatible data."""
@@ -124,9 +134,11 @@ def _parse_sensor_configs(
         if not address:
             raise ValueError(f"{source_name} item #{index} is missing mac/address")
 
-        name = str(item.get("name") or f"{default_name}_{index}")
-        decoder = _normalize_decoder(item.get("decoder") or default_decoder)
-        sensors[address] = SensorConfig(address=address, name=name, decoder=decoder)
+        name     = str(item.get("name") or f"{default_name}_{index}")
+        decoder  = _normalize_decoder(item.get("decoder") or default_decoder)
+        material = str(item.get("material") or default_material)
+        color    = str(item.get("color") or default_color)
+        sensors[address] = SensorConfig(address=address, name=name, decoder=decoder, material=material, color=color)
     return sensors
 
 
