@@ -1,23 +1,25 @@
 # temp-humidity-exporter
 
-Bluetooth 対応の温湿度計が送信する BLE アドバタイズを受信し、Flask の `/metrics` で Prometheus 形式のメトリクスとして公開する exporter です。
+BLE 温湿度センサーのアドバタイズを `bluepy` で受信し、Flask で Prometheus 形式のメトリクスを公開する exporter です。現行実装の本体は `src/thexporter/` パッケージで、`src/thexporter.py` は起動用の薄いラッパーです。
 
-現状サポートしているアドバタイズ形式:
-- `bthome`: BTHome v2 の平文広告
-- `pvvx_custom`: PVVX / ATC 系カスタムファームウェアの Custom Format
-- `auto`: 上の 2 形式を順に自動判定
+## 現在の対応広告
 
-## ファイル構成
+- `pvvx_atc1441`: 15 バイトの ATC1441 互換 PVVX 広告
+- `pvvx_custom`: 17 バイトの PVVX Custom Format
+- `auto`: 上記 2 形式を自動判定
 
-- `src/thexporter/`: exporter の Python パッケージ本体
+現行の `src/thexporter` 実装は PVVX 系の Environmental Sensing service data をデコードします。旧 README にあった `bthome` の説明は、現行実装とは一致しません。
+
+## 主な構成
+
+- `src/thexporter.py`: 起動用エントリポイント
+- `src/thexporter/`: exporter 本体
+- `config.json`: 実行時設定ファイル
 - `requirements.txt`: Python 依存関係
-- `config.json`: 起動時に読むローカル設定ファイル
-- `Dockerfile`: コンテナイメージ定義
-- `docker-compose.yml`: Raspberry Pi 上の compose 起動定義
 
-## Raspberry Pi 4B での準備
+## セットアップ
 
-Raspberry Pi OS を想定しています。
+Raspberry Pi OS など Linux 環境を想定しています。
 
 ```bash
 sudo apt update
@@ -28,114 +30,118 @@ python3 -m venv .venv
 pip install -r requirements.txt
 ```
 
-Bluetooth スキャンには BlueZ が必要です。アドバタイズ受信だけであれば通常は root 不要ですが、環境によっては `sudo setcap 'cap_net_raw,cap_net_admin+eip' $(readlink -f $(which python3))` などの追加設定が必要になることがあります。
-
-## 起動方法
-
-複数の温湿度計を個別に管理する場合は、既定では `config.json` を読みます。
+BLE スキャンには BlueZ とスキャン権限が必要です。root で実行しない場合は、環境によって次のような capability 付与が必要です。
 
 ```bash
-cd /workspaces/temp-humidity-exporter
-. .venv/bin/activate
-python3 src/thexporter.py
+sudo setcap 'cap_net_raw,cap_net_admin+eip' "$(readlink -f "$(which python3)")"
 ```
 
-dev container など BlueZ や system D-Bus が見えていない環境でアプリの疎通だけ確認したい場合は、mock バックエンドを使えます。
+## 設定ファイル
 
-```bash
-cd /workspaces/temp-humidity-exporter
-. .venv/bin/activate
-THX_SCANNER_BACKEND=mock python3 src/thexporter.py
-```
+現行実装では `config.json` が必須です。起動時に指定されたパスのファイルが存在しない場合、プロセスは終了します。
 
-`config.json` の例:
+設定例:
 
 ```json
 {
   "bind_host": "0.0.0.0",
   "port": 8000,
-  "metric_ttl_seconds": 180,
-  "scan_mode": "passive",
   "log_level": "INFO",
+  "scan_seconds": 3.0,
+  "metric_ttl_seconds": 180,
   "default_decoder": "auto",
-  "default_sensor_name": "ble_sensor",
+  "default_sensor_name": "pvvx",
   "sensors": [
-    {"mac": "AA:BB:CC:DD:EE:01", "name": "greenhouse_north", "decoder": "auto"},
-    {"mac": "AA:BB:CC:DD:EE:02", "name": "greenhouse_south", "decoder": "bthome"}
+    {
+      "mac": "AA:BB:CC:DD:EE:01",
+      "name": "greenhouse_north",
+      "decoder": "auto"
+    },
+    {
+      "mac": "AA:BB:CC:DD:EE:02",
+      "name": "greenhouse_south",
+      "decoder": "pvvx_custom"
+    }
   ]
 }
 ```
 
-単一端末だけで使いたい場合は従来どおり以下でも動作します。
+設定項目:
 
-```bash
-THX_SENSOR_MAC=AA:BB:CC:DD:EE:FF \
-THX_SENSOR_NAME=greenhouse_main \
-THX_DECODER=auto \
-python3 src/thexporter.py
-```
+- `bind_host`: Flask の bind アドレス。既定値は `0.0.0.0`
+- `port`: HTTP listen ポート。既定値は `8000`
+- `log_level`: ログレベル。既定値は `INFO`
+- `scan_seconds`: 1 回の BLE スキャン時間。既定値は `3.0`
+- `metric_ttl_seconds`: センサー値を fresh とみなす秒数。既定値は `180`
+- `default_decoder`: 未指定センサーの既定 decoder 名。既定値は `auto`
+- `default_sensor_name`: 自動発見時のフォールバック名プレフィックス。既定値は `pvvx`
+- `sensors`: 監視対象センサーの配列。各要素は `mac` または `address`、任意で `name`、`decoder` を持てます
 
-主要な環境変数:
+`sensors` を省略すると自動発見モードになります。この場合、受信した広告からセンサーを動的に登録し、名前は「設定名」「BLE Local Name」「`pvvx_<末尾6桁>`」の順で決まります。
 
-- `THX_CONFIG_PATH`: 設定ファイルのパス。既定値は `config.json`
-- `THX_SENSORS`: 複数センサー設定用の JSON 配列。指定時は `config.json` の `sensors` より優先されます。各要素は `mac` または `address`、任意で `name`、`decoder` を持てます
-- `THX_SENSOR_MAC`: 単一センサー向けの後方互換設定。`THX_SENSORS` 未指定時のみ使用
-- `THX_SENSOR_NAME`: 単一センサー時の `sensor_name` ラベル。複数センサー時は未指定項目のデフォルト名プレフィックスにも使用
-- `THX_DECODER`: 既定の decoder。`auto`, `bthome`, `pvvx_custom`
-- `THX_SCANNER_BACKEND`: `ble` または `mock`。既定値は `ble`
-- `THX_SCAN_MODE`: `passive` または `active`。既定値は `passive`。失敗時は自動で `active` へフォールバック
-- `THX_METRIC_TTL_SECONDS`: 何秒間を fresh とみなすか。既定値は `180`
-- `THX_BIND_HOST`: Flask bind アドレス。既定値は `0.0.0.0`
-- `THX_PORT`: Flask listen port。既定値は `8000`
-- `THX_LOG_LEVEL`: `DEBUG`, `INFO` など
+## 起動方法
 
-設定の優先順位は `環境変数 > config.json > 既定値` です。
-
-`THX_SENSORS` も `config.json` も指定しない場合は、対応する広告を見つけたセンサーを自動発見して `ble_sensor_<mac>` 形式の名前で出力します。
-ただし `THX_SCANNER_BACKEND=mock` の場合は、未設定時に `00:00:00:00:00:01` / `<default_sensor_name>_mock` の疑似センサーを生成します。
-
-
-## Docker Compose での起動
-
-Raspberry Pi 上で `docker compose` を使う場合は、BlueZ の system D-Bus にアクセスできるように `host` ネットワークと `/run/dbus` のマウントを使います。
+既定の `config.json` を使う場合:
 
 ```bash
 cd /workspaces/temp-humidity-exporter
-docker compose up -d --build
+. .venv/bin/activate
+python3 src/thexporter.py
 ```
 
-この compose 定義では以下を前提にしています。
+設定ファイルを明示する場合:
 
-- イメージ内にコピーされた `config.json` を `/app/config.json` として使用
-- `DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket` を設定
-- `NET_ADMIN` と `NET_RAW` を付与
-- ポートは `network_mode: host` で Raspberry Pi 本体の `8000` をそのまま使用
+```bash
+python3 src/thexporter.py --config /path/to/config.json
+```
 
-環境によって BLE スキャン権限が不足する場合は、追加で `privileged: true` を検討してください。まずは現在の compose 定義で試すのがおすすめです。
-`docker compose` を dev container などからホストの Docker daemon に向けて実行する場合、workspace 内の `./config.json` を bind mount するとパス解決の違いで失敗することがあります。この compose 定義はその問題を避けるため、`config.json` をイメージへ同梱する前提にしています。設定を変えたら `docker compose up --build` でイメージを作り直してください。
-一方で、一般的な dev container のように `/run/dbus/system_bus_socket` と Bluetooth デバイスが見えていない環境では、実 BLE スキャンはできません。その場合は `THX_SCANNER_BACKEND=mock` で Flask と metrics の確認を行い、実機 BLE は Raspberry Pi ホストかこの compose 環境で確認してください。
+モジュール起動でも同じです。
 
-## エンドポイント
+```bash
+python3 -m src.thexporter --config /path/to/config.json
+```
 
-- `/`: 設定済みセンサー一覧の簡易確認
-- `/healthz`: 設定済み全センサーが TTL 内なら `200`。未設定モードでは少なくとも 1 台 fresh なら `200`
-- `/metrics`: Prometheus 形式の exporter 出力
+利用できる CLI オプションは `-c`, `--config` のみです。
 
-代表的なメトリクス:
+## HTTP エンドポイント
 
-- `ble_temp_humidity_configured_sensor_info`
-- `ble_temp_humidity_sensor_up`
-- `ble_temp_humidity_temperature_celsius`
-- `ble_temp_humidity_relative_humidity_percent`
-- `ble_temp_humidity_battery_percent`
-- `ble_temp_humidity_battery_voltage_volts`
-- `ble_temp_humidity_last_seen_timestamp_seconds`
-- `ble_temp_humidity_advertisement_age_seconds`
-- `ble_temp_humidity_rssi_dbm`
+- `/`: exporter の状態とデバイス一覧を JSON で返します
+- `/health`: ヘルスチェック用のプレーンテキストを返します
+- `/metrics`: Prometheus text format でメトリクスを返します
 
-各メトリクスには `address` と `sensor_name` ラベルが付くため、Prometheus 側で複数端末を識別できます。
+`/health` は以下の条件で `200` を返します。
 
-## Prometheus 設定例
+- `sensors` を設定している場合: 全センサーが TTL 内で fresh
+- 自動発見モードの場合: 少なくとも 1 台が TTL 内で fresh
+- かつ scanner thread が稼働中で、直近エラーがない
+
+条件を満たさない場合は `503` を返します。レスポンス本文は `200\n` または `503\n` です。
+
+## Prometheus メトリクス
+
+主なメトリクス:
+
+- `thexporter_info`
+- `thexporter_scanner_running`
+- `thexporter_scrape_success`
+- `thexporter_sensor_up`
+- `thexporter_last_seen_timestamp_seconds`
+- `thexporter_advertisement_age_seconds`
+- `thexporter_temperature_celsius`
+- `thexporter_humidity_percent`
+- `thexporter_battery_percent`
+- `thexporter_battery_voltage_volts`
+- `thexporter_rssi_dbm`
+- `thexporter_packet_counter`
+- `thexporter_flags`
+
+センサー単位のメトリクスには少なくとも次のラベルが付きます。
+
+- `address`
+- `sensor_name`
+- `decoder`
+
+Prometheus 設定例:
 
 ```yaml
 scrape_configs:
@@ -145,6 +151,17 @@ scrape_configs:
           - raspberrypi.local:8000
 ```
 
+## Docker 利用時の注意
+
+コンテナで BLE を使う場合は、少なくとも次が必要です。
+
+- `network_mode: host`
+- `cap_add: [NET_ADMIN, NET_RAW]`
+- `/run/dbus` のマウント
+- コンテナ内で読める `config.json`
+
+起動コマンドは現行実装に合わせて `python src/thexporter.py --config /app/config.json` を基準にしてください。
+
 ## 補足
 
-温湿度計ごとに BLE 広告フォーマットは異なります。もし実機が `bthome` / `pvvx_custom` 以外の形式を使っている場合は、その広告データ仕様に合わせて `src/thexporter/decoders.py` の decoder を追加してください。
+この README は `src/thexporter` の現行実装を基準にしています。`dustbox` / `dustbox2` 配下の旧ソースは参照していません。
