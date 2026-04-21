@@ -1,6 +1,22 @@
-# temp-humidity-exporter
+# temp-humidity-exporter <!-- omit in toc -->
 
 BLE 温湿度センサーのアドバタイズを `bluepy` で受信し、Flask で Prometheus 形式のメトリクスを公開する exporter です。現行実装の本体は `src/thexporter/` パッケージで、`src/thexporter.py` は起動用の薄いラッパーです。
+
+## 目次  <!-- omit in toc -->
+
+- [現在の対応アドバタイズデータ](#現在の対応アドバタイズデータ)
+- [主な構成](#主な構成)
+- [セットアップ](#セットアップ)
+- [設定ファイル](#設定ファイル)
+- [起動方法](#起動方法)
+- [HTTP エンドポイント](#http-エンドポイント)
+- [Prometheus メトリクス](#prometheus-メトリクス)
+- [Docker 利用時の注意](#docker-利用時の注意)
+- [補足](#補足)
+- [デバイスについて](#デバイスについて)
+  - [ざっと手順](#ざっと手順)
+  - [ファームウェアを変更する(pvvx化)](#ファームウェアを変更するpvvx化)
+
 
 ## 現在の対応アドバタイズデータ
 
@@ -167,7 +183,9 @@ scrape_configs:
 この README は `src/thexporter` の現行実装を基準にしています。`dustbox` / `dustbox2` 配下の旧ソースは参照していません。
 
 ## デバイスについて
+
 ### ざっと手順
+
 1. [Xiaomi Home](https://play.google.com/store/apps/details?id=com.xiaomi.smarthome&hl=ja) アプリのダウンロードとユーザ登録
 1. [Xiaomi Home](https://play.google.com/store/apps/details?id=com.xiaomi.smarthome&hl=ja) アプリでデバイスをいったん登録
 1. [token-extractor](https://github.com/PiotrMachowski/Xiaomi-cloud-tokens-extractor) を用いてファーム更新用の情報を取得
@@ -176,6 +194,8 @@ scrape_configs:
     1. まずは公式側のファームの更新
     1. つづいて、ATCファームウェアを導入する
 1. [nRF Connect](https://play.google.com/store/apps/details?id=no.nordicsemi.android.mcp&hl=ja) 等のBluetoothデバッグアプリを用いて、対象のデバイスがUUID[0x181A]でService Dataをアドバタイズ出力しているか、を確認する
+   
 ### ファームウェアを変更する(pvvx化)
+
 - https://pvvx.github.io/ATC_MiThermometer/TelinkMiFlasher.html
 - https://atc1441.github.io/TelinkFlasher.html
