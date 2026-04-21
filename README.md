@@ -13,6 +13,7 @@ BLE 温湿度センサーのアドバタイズを `bluepy` で受信し、Flask 
 - [Prometheus メトリクス](#prometheus-メトリクス)
 - [Docker 利用時の注意](#docker-利用時の注意)
 - [補足](#補足)
+- [気になっていること](#気になっていること)
 - [デバイスについて](#デバイスについて)
   - [ざっと手順](#ざっと手順)
   - [ファームウェアを変更する(pvvx化)](#ファームウェアを変更するpvvx化)
@@ -181,6 +182,12 @@ scrape_configs:
 ## 補足
 
 この README は `src/thexporter` の現行実装を基準にしています。`dustbox` / `dustbox2` 配下の旧ソースは参照していません。
+
+## 気になっていること
+
+- `docker history` で`DISK USAGEが868MB`で大きい印象。問題はDockerfileの`apt install(480MB)`なので、これを最適化したい
+  - https://github.com/IanHarvey/bluepy にビルド方法が記載されてるので、追って参考にしよう
+- `mecric`に`material`と`color`が含まれており、これがフィラメントを示すだろう、と考えている。grafanaでどういうダッシュボードを作ると一番良いかを模索中
 
 ## デバイスについて
 
