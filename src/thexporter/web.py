@@ -25,7 +25,7 @@ def create_app(config: Config, store: ScanDataStore, scanner: ScanThread) -> Fla
         """Return a JSON snapshot of exporter state and discovered devices."""
         return jsonify(build_status_payload(config, store, scanner))
 
-    @app.get("/health")
+    @app.get("/healthz")
     def health() -> Response:
         """Expose a minimal health response expected by external monitors."""
         body, status = render_health(config, store, scanner)
