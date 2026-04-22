@@ -1,9 +1,9 @@
 from __future__ import annotations
+from dataclasses import asdict, dataclass, field
 
 import threading
 import datetime
 import time
-from dataclasses import asdict, dataclass, field
 
 
 @dataclass(slots=True)

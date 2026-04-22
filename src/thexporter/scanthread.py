@@ -1,12 +1,13 @@
 from __future__ import annotations
+from typing import Any
 
 import logging
 import os
 import sys
 import time
 import threading
-from typing import Any
-from .logger import configure_logging
+
+from .helper.logger import configure_logging
 
 try:
     from bluepy.btle import BTLEException, DefaultDelegate, Scanner

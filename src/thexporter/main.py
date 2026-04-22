@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .config import Config
 from .constants import LOGGER_NAME, DEFAULT_CONFIG_PATH
-from .logger import configure_logging, logger_initialize_config
+from .helper.logger import configure_logging, logger_initialize_config
 from .scandata import ScanDataStore
 from .scanthread import ScanThread
 from .web import create_app

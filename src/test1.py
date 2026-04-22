@@ -10,8 +10,7 @@ from bluepy.btle import BTLEException, DefaultDelegate, Scanner
 import binascii
 from colorama import Fore, Back, Style, init
 
-
-from thexporter.logger import Logger
+from thexporter.helper.logger import Logger
 from thexporter.constants import SCAN_SECONDS, LOGGER_NAME, CAP_NET_ADMIN, CAP_NET_RAW
 
 #LOGGER_NAME     = "test"

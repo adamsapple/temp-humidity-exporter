@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import logging
-
 from flask import Flask, Response, jsonify
 
+from .helper.logger import configure_logging
 from .config import Config
 from .constants import FLASK_NAME, LOGGER_NAME
 from .controller.health import render_health
@@ -12,7 +12,6 @@ from .controller.status import build_status_payload
 from .scandata import ScanDataStore
 from .scanthread import ScanThread
 
-from .logger import configure_logging
 
 def create_app(config: Config, store: ScanDataStore, scanner: ScanThread) -> Flask:
     """Create the Flask application that exposes status, health, and metrics."""
