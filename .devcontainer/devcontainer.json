@@ -4,10 +4,6 @@
   "name": "Ubuntu",
   "image": "mcr.microsoft.com/devcontainers/base:noble",
   "features": {
-    "ghcr.io/eliises/devcontainer-features/devcontainers-cli:1": {
-      "version": "latest",
-      "nodeVersion": "latest"
-    },
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
       "moby": true,
       "dockerDashComposeVersion": "v2"
@@ -16,6 +12,8 @@
       "version": "3.13"
     }
   },
+  //"workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+  //"workspaceFolder": "/workspace",
   "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached",
   "workspaceFolder": "${localWorkspaceFolder}",
   "postCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential libglib2.0-dev && pip3 install -r requirements.txt"
