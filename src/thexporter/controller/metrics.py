@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..config import Config
-from ..metrics import build_metrics
+from ..metric_builder import build_metrics
 from ..scandata import ScanDataStore
 
 
