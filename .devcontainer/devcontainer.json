@@ -8,14 +8,15 @@
       "version": "latest",
       "nodeVersion": "latest"
     },
-    "docker-from-docker": {
-			"version": "latest",
-			"moby": true,
-			"dockerDashComposeVersion": "v2"
-		},
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "moby": true,
+      "dockerDashComposeVersion": "v2"
+    },
     "ghcr.io/devcontainers/features/python:1": {
       "version": "3.13"
     }
   },
-  "postCreateCommand": "pip3 install -r requirements.txt"
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached",
+  "workspaceFolder": "${localWorkspaceFolder}",
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential libglib2.0-dev && pip3 install -r requirements.txt"
 }
