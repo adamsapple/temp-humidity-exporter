@@ -1,4 +1,7 @@
-FROM python:3.13.13-slim-trixie
+ARG PYTHON_VERSION=3.13.13
+ARG IMAGE_SUFFIX=-slim-trixie
+
+FROM python:${PYTHON_VERSION}${IMAGE_SUFFIX} as builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -14,8 +17,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
-RUN pip install --upgrade pip setuptools wheel
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade --user pip setuptools wheel
+RUN pip install --no-cache-dir --user -r requirements.txt
 
 COPY src ./src
 COPY config.json ./config.json

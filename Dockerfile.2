@@ -1,0 +1,48 @@
+# syntax=docker/dockerfile:1.7
+
+ARG PYTHON_VERSION=3.13.13
+ARG IMAGE_SUFFIX=-slim-trixie
+
+FROM python:${PYTHON_VERSION}${IMAGE_SUFFIX} AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:${PATH}"
+
+WORKDIR /app
+
+COPY requirements.txt ./
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        libglib2.0-dev \
+    && python -m venv "${VIRTUAL_ENV}" \
+    && pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r requirements.txt \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM python:${PYTHON_VERSION}${IMAGE_SUFFIX} AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:${PATH}"
+
+WORKDIR /app
+
+RUN --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libglib2.0-0
+
+COPY --from=builder /opt/venv /opt/venv
+COPY src ./src
+COPY config.json ./config.json
+
+EXPOSE 8000
+
+CMD ["python", "src/thexporter.py", "--config", "/app/config.json"]

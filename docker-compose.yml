@@ -2,7 +2,10 @@ services:
   temp-humidity-exporter:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.2
+      args:    
+        - PYTHON_VERSION=3.13.13
+        - IMAGE_SUFFIX=-slim-trixie
     container_name: temp-humidity-exporter
     restart: unless-stopped
     network_mode: host
