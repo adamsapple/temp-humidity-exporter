@@ -66,17 +66,19 @@ sudo setcap 'cap_net_raw,cap_net_admin+eip' "$(readlink -f "$(which python3)")"
   "log_level": "INFO",
   "scan_seconds": 3.0,
   "metric_ttl_seconds": 180,
+  "negative_cache_seconds": 60,
   "default_decoder": "auto",
   "default_sensor_name": "pvvx",
+  "discovered_devices_path": "./discovered_devices.yml",
   "sensors": [
     {
       "mac": "AA:BB:CC:DD:EE:01",
-      "name": "greenhouse_north",
+      "name_alias": "greenhouse_north",
       "decoder": "auto"
     },
     {
       "mac": "AA:BB:CC:DD:EE:02",
-      "name": "greenhouse_south",
+      "name_alias": "greenhouse_south",
       "decoder": "pvvx_custom"
     }
   ]
@@ -90,11 +92,27 @@ sudo setcap 'cap_net_raw,cap_net_admin+eip' "$(readlink -f "$(which python3)")"
 - `log_level`: ログレベル。既定値は `INFO`
 - `scan_seconds`: 1 回の BLE スキャン時間。既定値は `3.0`
 - `metric_ttl_seconds`: センサー値を fresh とみなす秒数。既定値は `180`
+- `negative_cache_seconds`: `0x181A` を持たない広告として見えた MAC を一時的に再評価しない秒数。既定値は `60`。`0` で無効化
 - `default_decoder`: 未指定センサーの既定 decoder 名。既定値は `auto`
 - `default_sensor_name`: 自動発見時のフォールバック名プレフィックス。既定値は `pvvx`
-- `sensors`: 監視対象センサーの配列。各要素は `mac` または `address`、任意で `name`、`decoder` を持てます
+- `discovered_devices_path`: 自動発見したデバイスを書き出す YAML のパス。省略時は `config.json` と同じディレクトリの `discovered_devices.yml`
+- `sensors`: 監視対象センサーの配列。各要素は `mac` または `address`、任意で `name_alias`、`decoder`、`material`、`color` を持てます
 
-`sensors` を省略すると自動発見モードになります。この場合、受信した広告からセンサーを動的に登録し、名前は「設定名」「BLE Local Name」「`pvvx_<末尾6桁>`」の順で決まります。
+`sensors.name_alias` は表示名の上書きです。未指定時は BLE 広告の Local Name を使い、それも無い場合は `pvvx_<末尾6桁>` のフォールバック名になります。
+
+`0x181A` の Service Data を含む広告を受信すると、対象デバイスは `discovered_devices.yml` に保存され、次回起動以降も収集対象になります。書き出される YAML は次のような構成です。
+
+```yaml
+devices:
+  - mac: "AA:BB:CC:DD:EE:01"
+    name: "LYWSD03MMC"
+    decoder: "pvvx_custom"
+    target: "undefined"
+```
+
+`target` は `undefined` / `include` / `ignore` を受け付けます。`undefined` と `include` は収集対象、`ignore` は収集対象外です。`undefined` のデバイスはメトリクス収集対象ですが、`/health` と `/healthz` の必須監視対象には含めません。
+
+`0x181A` を持たないデバイスは negative cache に入り、`negative_cache_seconds` の間は再判定をスキップします。TTL が切れると再び `0x181A` を持つかどうか評価されます。
 
 ## 起動方法
 
@@ -124,12 +142,13 @@ python3 -m src.thexporter --config /path/to/config.json
 
 - `/`: exporter の状態とデバイス一覧を JSON で返します
 - `/health`: ヘルスチェック用のプレーンテキストを返します
+- `/healthz`: `/health` と同じ内容を返します
 - `/metrics`: Prometheus text format でメトリクスを返します
 
 `/health` は以下の条件で `200` を返します。
 
-- `sensors` を設定している場合: 全センサーが TTL 内で fresh
-- 自動発見モードの場合: 少なくとも 1 台が TTL 内で fresh
+- `sensors` にある全センサーと、`discovered_devices.yml` で `target: include` の全センサーが TTL 内で fresh
+- それらが 1 台も無い場合は、`ignore` ではない発見済みセンサーのうち少なくとも 1 台が TTL 内で fresh
 - かつ scanner thread が稼働中で、直近エラーがない
 
 条件を満たさない場合は `503` を返します。レスポンス本文は `200\n` または `503\n` です。

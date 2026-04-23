@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from .config import Config, SensorConfig
+from .config import Config
 from .constants import APP_VERSION
+from .device_registry import DeviceRegistry
 from .scandata import ScanDataStore
 
 
-def build_metrics(store: ScanDataStore, config: Config) -> str:
+def build_metrics(store: ScanDataStore, config: Config, registry: DeviceRegistry) -> str:
     """Render the latest cached readings in Prometheus text exposition format."""
     readings = store.snapshot()
     status = store.status_snapshot()
@@ -27,15 +28,7 @@ def build_metrics(store: ScanDataStore, config: Config) -> str:
         "# TYPE thexporter_scrape_success gauge",
         f"thexporter_scrape_success {1 if readings else 0}",
     ]
-
-    sensors = config.sensors or {
-        address: SensorConfig(
-            address=reading.address,
-            name=reading.name,
-            decoder=reading.decoder,
-        )
-        for address, reading in readings.items()
-    }
+    sensors = registry.snapshot_monitored_devices()
 
     if not sensors:
         return "\n".join(lines) + "\n"
@@ -65,14 +58,14 @@ def build_metrics(store: ScanDataStore, config: Config) -> str:
         ]
     )
 
-    for sensor in sensors.values():
-        reading = readings.get(sensor.address)
+    for device in sensors.values():
+        reading = readings.get(device.address)
         labels = {
-            "address": sensor.address,
-            "sensor_name": sensor.name,
-            "decoder": reading.decoder if reading else sensor.decoder,
-            "material": sensor.material,
-            "color": sensor.color,
+            "address": device.address,
+            "sensor_name": device.name,
+            "decoder": reading.decoder if reading else device.decoder,
+            "material": device.material,
+            "color": device.color,
         }
         age_seconds = reading.age_seconds() if reading else float(config.metric_ttl_seconds + 1)
         up = 1 if reading and age_seconds <= config.metric_ttl_seconds else 0

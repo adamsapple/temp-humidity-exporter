@@ -4,7 +4,6 @@ from typing import Any
 import logging
 import os
 import sys
-import time
 import threading
 
 from .helper.logger import configure_logging
@@ -24,8 +23,9 @@ except ModuleNotFoundError as exc:  # pragma: no cover - depends on runtime envi
     Scanner = None  # type: ignore[assignment]
     BLUEPY_IMPORT_ERROR = exc
 
-from .config import Config, SensorConfig, normalize_mac
+from .config import Config, normalize_mac
 from .constants import CAP_NET_ADMIN, CAP_NET_RAW, LOGGER_NAME
+from .device_registry import DeviceRegistry
 from .devices.pvvx import decode_pvvx_service_data, extract_pvvx_service_data
 from .scandata import ScanDataStore, SensorReading
 
@@ -36,10 +36,11 @@ configure_logging(LOGGER, logging.INFO)
 class ScanThread:
     """Run bluepy scanning in a dedicated daemon thread."""
 
-    def __init__(self, config: Config, store: ScanDataStore) -> None:
+    def __init__(self, config: Config, store: ScanDataStore, registry: DeviceRegistry) -> None:
         """Bind runtime configuration and the shared reading store."""
         self._config = config
         self._store = store
+        self._registry = registry
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -68,7 +69,7 @@ class ScanThread:
         self._store.mark_running(True)
         if not has_scan_permissions():
             _print_permission_guidance("Preflight warning")
-        scanner = Scanner().withDelegate(_ScanDelegate(self._config, self._store))
+        scanner = Scanner().withDelegate(_ScanDelegate(self._config, self._store, self._registry))
 
         try:
             while not self._stop_event.is_set():
@@ -96,39 +97,44 @@ class ScanThread:
 class _ScanDelegate(DefaultDelegate):
     """Receive bluepy discovery callbacks and translate them into SensorReading objects."""
 
-    def __init__(self, config: Config, store: ScanDataStore) -> None:
+    def __init__(self, config: Config, store: ScanDataStore, registry: DeviceRegistry) -> None:
         """Remember configuration and shared store used by discovery callbacks."""
         super().__init__()
-        self._config = config
         self._store = store
+        self._registry = registry
 
     def handleDiscovery(self, device: Any, isNewDev: bool, isNewData: bool) -> None:
         """Decode supported advertisements and push fresh values into the store."""
         if not (isNewDev or isNewData):
             return
 
+        device_address = normalize_mac(getattr(device, "addr", None))
+        if self._registry.should_skip_due_to_negative_cache(device_address):
+            return
+
         payload = extract_pvvx_service_data(device)
         if payload is None:
+            self._registry.mark_runtime_ignored(device_address)
             return
 
         decoded = decode_pvvx_service_data(payload)
         if decoded is None:
+            self._registry.mark_runtime_ignored(device_address)
             return
 
-        device_address = normalize_mac(getattr(device, "addr", None))
         payload_address = normalize_mac(decoded.get("address"))
-        sensor = self._resolve_sensor(device_address, payload_address)
-        if sensor is None:
+        managed = self._registry.observe_supported_device(
+            device_address=device_address,
+            payload_address=payload_address,
+            device_name=_device_name(device),
+            decoder=str(decoded["decoder"]),
+        )
+        if managed is None:
             return
 
-        # When sensors are configured, use the configured address as the canonical label key.
-        address = sensor.address if self._config.sensors else (payload_address or device_address or sensor.address)
-        configured_name = None if not self._config.sensors else sensor.name
-        # Prefer the configured display name, otherwise try the BLE local name, then fall back to a synthetic name.
-        name = configured_name or _device_name(device) or self._fallback_name(address)
         reading = SensorReading(
-            address=address,
-            name=name,
+            address=managed.address,
+            name=managed.name,
             decoder=str(decoded["decoder"]),
             temperature_celsius=_as_float(decoded.get("temperature_celsius")),
             humidity_percent=_as_float(decoded.get("humidity_percent")),
@@ -139,32 +145,7 @@ class _ScanDelegate(DefaultDelegate):
             rssi=_as_int(getattr(device, "rssi", None)),
         )
         self._store.update(reading)
-        LOGGER.info("Updated reading for %s: %s", address, reading.to_dict())
-
-    def _resolve_sensor(self, *addresses: str | None) -> SensorConfig | None:
-        """Match an observed device to configured sensors or synthesize one in auto-discovery mode."""
-        normalized_addresses = [address for address in addresses if address]
-
-        if self._config.sensors:
-            for address in normalized_addresses:
-                sensor = self._config.sensors.get(address)
-                if sensor is not None:
-                    return sensor
-            return None
-
-        address = next((value for value in normalized_addresses if value), None)
-        if address is None:
-            return None
-        return SensorConfig(
-            address=address,
-            name=self._fallback_name(address),
-            decoder=self._config.default_decoder,
-        )
-
-    def _fallback_name(self, address: str) -> str:
-        """Build a stable synthetic name when the device has no configured or advertised name."""
-        suffix = address.replace(":", "").lower()[-6:]
-        return f"{self._config.default_sensor_name}_{suffix}"
+        LOGGER.info("Updated reading for %s: %s", managed.address, reading.to_dict())
 
 
 def _require_bluepy() -> None:

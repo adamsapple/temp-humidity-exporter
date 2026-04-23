@@ -2,20 +2,22 @@
   "bind_host": "0.0.0.0",
   "port": 8000,
   "metric_ttl_seconds": 180,
+  "negative_cache_seconds": 60,
   "scan_mode": "passive",
   "log_level": "INFO",
   "default_decoder": "auto",
   "default_sensor_name": "ble_sensor",
+  "discovered_devices_path": "./discovered_devices.yml",
   "sensors": [
     {
       "mac": "AA:BB:CC:DD:EE:01",
-      "name": "greenhouse_north",
+      "name_alias": "greenhouse_north",
       "decoder": "auto"
     },
     {
       "mac": "AA:BB:CC:DD:EE:02",
-      "name": "greenhouse_south",
-      "decoder": "bthome"
+      "name_alias": "greenhouse_south",
+      "decoder": "auto"
     }
   ]
 }

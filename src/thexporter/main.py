@@ -9,7 +9,8 @@ from pathlib import Path
 
 from .config import Config
 from .constants import LOGGER_NAME, DEFAULT_CONFIG_PATH
-from .helper.logger import configure_logging, logger_initialize_config
+from .device_registry import DeviceRegistry
+from .helper.logger import configure_logging
 from .scandata import ScanDataStore
 from .scanthread import ScanThread
 from .web import create_app
@@ -46,8 +47,9 @@ def main() -> None:
     configure_logging(LOGGER, config.log_level)
 
     store   = ScanDataStore()
-    scanner = ScanThread(config, store)
-    app     = create_app(config, store, scanner)
+    registry = DeviceRegistry(config)
+    scanner = ScanThread(config, store, registry)
+    app     = create_app(config, store, scanner, registry)
 
     def _shutdown(*_: Any) -> None:
         """Convert SIGTERM into the same shutdown path as Ctrl+C."""
@@ -57,11 +59,13 @@ def main() -> None:
     scanner.start()
 
     LOGGER.info(
-        "Starting exporter on %s:%s scan_seconds=%s configured_sensors=%s",
+        "Starting exporter on %s:%s scan_seconds=%s configured_sensors=%s discovered_devices_path=%s negative_cache_seconds=%s",
         config.bind_host,
         config.port,
         config.scan_seconds,
         len(config.sensors),
+        config.discovered_devices_path,
+        config.negative_cache_seconds,
     )
 
     try:

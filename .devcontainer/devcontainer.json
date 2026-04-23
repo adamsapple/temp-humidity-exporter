@@ -14,8 +14,8 @@
   },
   //"workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
   //"workspaceFolder": "/workspace",
-  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached",
-  "workspaceFolder": "${localWorkspaceFolder}",
+  //"workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached",
+  //"workspaceFolder": "${localWorkspaceFolder}",
   "postCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential libglib2.0-dev && pip3 install -r requirements.txt",
   "remoteEnv" : {
     "WORKSPACE_PATH": "${containerWorkspaceFolder}"
