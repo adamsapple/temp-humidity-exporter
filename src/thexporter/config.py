@@ -29,6 +29,7 @@ class Config:
     log_level: str = "INFO"
     scan_seconds: float = DEFAULT_SCAN_SECONDS
     metric_ttl_seconds: int = 180
+    active_scan_ttl_seconds: int = 30
     default_decoder: str = "auto"
     default_sensor_name: str = "pvvx"
     default_material: str = "unknown"
@@ -47,6 +48,7 @@ class Config:
             log_level   = _config_or_default("log_level", file_config, "INFO").upper(),
             scan_seconds= _config_or_default_float("scan_seconds", file_config, DEFAULT_SCAN_SECONDS),
             metric_ttl_seconds  = _config_or_default_int("metric_ttl_seconds", file_config, 180),
+            active_scan_ttl_seconds = _config_or_default_int("active_scan_ttl_seconds", file_config, 30),
             default_decoder     = _normalize_decoder(
                                     _config_or_default("default_decoder", file_config, "auto")
                                   ),
