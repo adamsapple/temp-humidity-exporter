@@ -8,6 +8,7 @@ from .scandata import ScanDataStore
 def build_metrics(store: ScanDataStore, config: Config) -> str:
     """Render the latest cached readings in Prometheus text exposition format."""
     readings = store.snapshot()
+    devices = store.device_snapshot()
     status = store.status_snapshot()
     lines = [
         "# HELP thexporter_info Static information about this exporter.",
@@ -31,7 +32,6 @@ def build_metrics(store: ScanDataStore, config: Config) -> str:
     sensors = config.sensors or {
         address: SensorConfig(
             address=reading.address,
-            name=reading.name,
             decoder=reading.decoder,
         )
         for address, reading in readings.items()
@@ -44,6 +44,8 @@ def build_metrics(store: ScanDataStore, config: Config) -> str:
         [
             "# HELP thexporter_sensor_up 1 if a fresh advertisement has been received within the TTL.",
             "# TYPE thexporter_sensor_up gauge",
+            "# HELP thexporter_sensor_info Human-friendly sensor metadata published when a stable name is known.",
+            "# TYPE thexporter_sensor_info gauge",
             "# HELP thexporter_last_seen_timestamp_seconds UNIX timestamp of the latest reading.",
             "# TYPE thexporter_last_seen_timestamp_seconds gauge",
             "# HELP thexporter_advertisement_age_seconds Seconds since the latest reading.",
@@ -67,13 +69,25 @@ def build_metrics(store: ScanDataStore, config: Config) -> str:
 
     for sensor in sensors.values():
         reading = readings.get(sensor.address)
+        device = devices.get(sensor.address)
         labels = {
             "address": sensor.address,
-            "sensor_name": sensor.name,
             "decoder": reading.decoder if reading else sensor.decoder,
             "material": sensor.material,
             "color": sensor.color,
         }
+        sensor_name = sensor.name or (device.device_name if device else None)
+        if sensor_name:
+            lines.append(
+                _metric_line(
+                    "thexporter_sensor_info",
+                    {
+                        "address": sensor.address,
+                        "sensor_name": sensor_name,
+                    },
+                    1,
+                )
+            )
         age_seconds = reading.age_seconds() if reading else float(config.metric_ttl_seconds + 1)
         up = 1 if reading and age_seconds <= config.metric_ttl_seconds else 0
 

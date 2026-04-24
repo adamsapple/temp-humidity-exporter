@@ -66,12 +66,12 @@ sudo setcap 'cap_net_raw,cap_net_admin+eip' "$(readlink -f "$(which python3)")"
   "log_level": "INFO",
   "scan_seconds": 3.0,
   "metric_ttl_seconds": 180,
+  "device_name_retry_seconds": 30,
   "default_decoder": "auto",
   "default_sensor_name": "pvvx",
   "sensors": [
     {
       "mac": "AA:BB:CC:DD:EE:01",
-      "name": "greenhouse_north",
       "decoder": "auto"
     },
     {
@@ -90,11 +90,12 @@ sudo setcap 'cap_net_raw,cap_net_admin+eip' "$(readlink -f "$(which python3)")"
 - `log_level`: ログレベル。既定値は `INFO`
 - `scan_seconds`: 1 回の BLE スキャン時間。既定値は `3.0`
 - `metric_ttl_seconds`: センサー値を fresh とみなす秒数。既定値は `180`
+- `device_name_retry_seconds`: デバイス名が広告から取れない場合に GATT で再取得を試す間隔。既定値は `30`
 - `default_decoder`: 未指定センサーの既定 decoder 名。既定値は `auto`
 - `default_sensor_name`: 自動発見時のフォールバック名プレフィックス。既定値は `pvvx`
 - `sensors`: 監視対象センサーの配列。各要素は `mac` または `address`、任意で `name`、`decoder` を持てます
 
-`sensors` を省略すると自動発見モードになります。この場合、受信した広告からセンサーを動的に登録し、名前は「設定名」「BLE Local Name」「`pvvx_<末尾6桁>`」の順で決まります。
+`sensors` を省略すると自動発見モードになります。この場合、受信した広告からセンサーを動的に登録します。表示名は「設定名 override」「BLE Local Name/Short Name」「GATT Device Name」「`pvvx_<末尾6桁>`」の順で決まります。
 
 ## 起動方法
 
@@ -123,10 +124,10 @@ python3 -m src.thexporter --config /path/to/config.json
 ## HTTP エンドポイント
 
 - `/`: exporter の状態とデバイス一覧を JSON で返します
-- `/health`: ヘルスチェック用のプレーンテキストを返します
+- `/healthz`: ヘルスチェック用のプレーンテキストを返します
 - `/metrics`: Prometheus text format でメトリクスを返します
 
-`/health` は以下の条件で `200` を返します。
+`/healthz` は以下の条件で `200` を返します。
 
 - `sensors` を設定している場合: 全センサーが TTL 内で fresh
 - 自動発見モードの場合: 少なくとも 1 台が TTL 内で fresh
@@ -141,6 +142,7 @@ python3 -m src.thexporter --config /path/to/config.json
 - `thexporter_info`
 - `thexporter_scanner_running`
 - `thexporter_scrape_success`
+- `thexporter_sensor_info`
 - `thexporter_sensor_up`
 - `thexporter_last_seen_timestamp_seconds`
 - `thexporter_advertisement_age_seconds`
@@ -152,11 +154,19 @@ python3 -m src.thexporter --config /path/to/config.json
 - `thexporter_packet_counter`
 - `thexporter_flags`
 
-センサー単位のメトリクスには少なくとも次のラベルが付きます。
+測定値系メトリクスには少なくとも次のラベルが付きます。
 
 - `address`
-- `sensor_name`
 - `decoder`
+
+`sensor_name` は時系列分裂を避けるため測定値メトリクスには含めず、`thexporter_sensor_info` でのみ公開します。
+
+例:
+
+```text
+thexporter_temperature_celsius{address="AA:BB:CC:DD:EE:FF",decoder="pvvx_custom",material="unknown",color="unknown"} 23.4
+thexporter_sensor_info{address="AA:BB:CC:DD:EE:FF",sensor_name="Living Room"} 1
+```
 
 Prometheus 設定例:
 

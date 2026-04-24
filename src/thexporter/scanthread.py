@@ -10,7 +10,7 @@ import threading
 from .helper.logger import configure_logging
 
 try:
-    from bluepy.btle import BTLEException, DefaultDelegate, Scanner
+    from bluepy.btle import BTLEException, DefaultDelegate, Peripheral, Scanner
     BLUEPY_IMPORT_ERROR: Exception | None = None
 except ModuleNotFoundError as exc:  # pragma: no cover - depends on runtime environment
     BTLEException = Exception
@@ -21,6 +21,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - depends on runtime envi
         def __init__(self, *_: Any, **__: Any) -> None:
             pass
 
+    Peripheral = None  # type: ignore[assignment]
     Scanner = None  # type: ignore[assignment]
     BLUEPY_IMPORT_ERROR = exc
 
@@ -32,6 +33,7 @@ from .scandata import ScanDataStore, SensorReading
 LOGGER = logging.getLogger(LOGGER_NAME)
 #LOGGER.setLevel(logging.INFO)
 configure_logging(LOGGER, logging.INFO)
+BLE_DEVICE_NAME_CHARACTERISTIC_UUID = "2A00"
 
 class ScanThread:
     """Run bluepy scanning in a dedicated daemon thread."""
@@ -77,6 +79,8 @@ class ScanThread:
                     LOGGER.info("scan started.")
                     scanner.scan(self._config.scan_seconds, passive=True)
                     self._store.mark_scan_completed()
+                    if not self._stop_event.is_set():
+                        self._resolve_pending_device_names()
                 except BTLEException as exc:
                     LOGGER.error("BLE scan error: %s", exc)
                     self._store.mark_error(str(exc))
@@ -91,6 +95,35 @@ class ScanThread:
                 scanner.stop()
             except Exception:
                 LOGGER.debug("Ignoring scanner stop failure", exc_info=True)
+
+    def _resolve_pending_device_names(self) -> None:
+        """Resolve missing device names over GATT between scan cycles."""
+        for address, address_type in self._store.device_name_lookup_candidates(self._config.device_name_retry_seconds):
+            if self._stop_event.is_set():
+                return
+
+            self._store.mark_gatt_name_attempt(address)
+            try:
+                device_name = _read_device_name_over_gatt(address, address_type)
+            except BTLEException as exc:
+                message = str(exc)
+                self._store.mark_gatt_name_failure(address, message)
+                LOGGER.info("GATT device-name lookup failed for %s: %s", address, message)
+                continue
+            except Exception as exc:
+                message = str(exc)
+                self._store.mark_gatt_name_failure(address, message)
+                LOGGER.exception("Unexpected GATT device-name lookup failure for %s", address)
+                continue
+
+            if not device_name:
+                message = "Device Name characteristic 0x2A00 was not present or returned an empty value."
+                self._store.mark_gatt_name_failure(address, message)
+                LOGGER.info("GATT device-name lookup returned no name for %s", address)
+                continue
+
+            self._store.mark_gatt_name_success(address, device_name)
+            LOGGER.info("Resolved device name over GATT for %s: %s", address, device_name)
 
 
 class _ScanDelegate(DefaultDelegate):
@@ -107,6 +140,16 @@ class _ScanDelegate(DefaultDelegate):
         if not (isNewDev or isNewData):
             return
 
+        device_address = normalize_mac(getattr(device, "addr", None))
+        device_address_type = _device_address_type(device)
+        advertised_name = _device_name(device)
+        if device_address:
+            self._store.observe_device(
+                device_address,
+                address_type=device_address_type,
+                device_name=advertised_name,
+            )
+
         payload = extract_pvvx_service_data(device)
         if payload is None:
             return
@@ -115,17 +158,28 @@ class _ScanDelegate(DefaultDelegate):
         if decoded is None:
             return
 
-        device_address = normalize_mac(getattr(device, "addr", None))
         payload_address = normalize_mac(decoded.get("address"))
         sensor = self._resolve_sensor(device_address, payload_address)
         if sensor is None:
+            for address in (device_address, payload_address):
+                if address:
+                    self._store.set_target_state(address, "exclude")
             return
 
         # When sensors are configured, use the configured address as the canonical label key.
         address = sensor.address if self._config.sensors else (payload_address or device_address or sensor.address)
-        configured_name = None if not self._config.sensors else sensor.name
-        # Prefer the configured display name, otherwise try the BLE local name, then fall back to a synthetic name.
-        name = configured_name or _device_name(device) or self._fallback_name(address)
+        for alias in (device_address, payload_address):
+            if alias and alias != address:
+                self._store.merge_device(alias, address)
+        self._store.observe_device(address, address_type=device_address_type, device_name=advertised_name)
+        self._store.set_target_state(address, "include")
+
+        configured_name = sensor.name
+        name = _resolve_display_name(
+            configured_name=configured_name,
+            discovered_name=self._store.get_device_name(address),
+            fallback_name=self._fallback_name(address),
+        )
         reading = SensorReading(
             address=address,
             name=name,
@@ -157,7 +211,6 @@ class _ScanDelegate(DefaultDelegate):
             return None
         return SensorConfig(
             address=address,
-            name=self._fallback_name(address),
             decoder=self._config.default_decoder,
         )
 
@@ -184,6 +237,86 @@ def _device_name(device: Any) -> str | None:
         if value:
             return str(value)
     return None
+
+
+def _device_address_type(device: Any) -> str | None:
+    """Return the normalized BLE address type when the scanner provides it."""
+    value = getattr(device, "addrType", None)
+    if not value:
+        return None
+    normalized = str(value).strip().lower()
+    if normalized in {"public", "random"}:
+        return normalized
+    return None
+
+
+def _resolve_display_name(
+    *,
+    configured_name: str | None,
+    discovered_name: str | None,
+    fallback_name: str,
+) -> str:
+    """Resolve the display name using config override, device name, then fallback."""
+    return configured_name or discovered_name or fallback_name
+
+
+def _read_device_name_over_gatt(address: str, address_type: str | None) -> str | None:
+    """Read the Generic Access Device Name characteristic from the device over GATT."""
+    last_error: BaseException | None = None
+    for candidate_type in _candidate_address_types(address_type):
+        try:
+            return _read_device_name_once(address, candidate_type)
+        except BTLEException as exc:
+            last_error = exc
+            continue
+
+    if last_error is not None:
+        raise last_error
+    return None
+
+
+def _candidate_address_types(address_type: str | None) -> list[str | None]:
+    """Return the addrType values to try for a GATT connection."""
+    candidates: list[str | None] = []
+    normalized = address_type if address_type in {"public", "random"} else None
+    if normalized is not None:
+        candidates.append(normalized)
+        candidates.append("random" if normalized == "public" else "public")
+    candidates.append(None)
+
+    seen: set[str | None] = set()
+    ordered: list[str | None] = []
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        ordered.append(candidate)
+    return ordered
+
+
+def _read_device_name_once(address: str, address_type: str | None) -> str | None:
+    """Perform one best-effort GATT read of the Device Name characteristic."""
+    if Peripheral is None:  # pragma: no cover - guarded by _require_bluepy at runtime
+        raise RuntimeError("bluepy Peripheral is unavailable in the current environment.")
+
+    peripheral = None
+    try:
+        if address_type is None:
+            peripheral = Peripheral(address)
+        else:
+            peripheral = Peripheral(address, addrType=address_type)
+        characteristics = peripheral.getCharacteristics(uuid=BLE_DEVICE_NAME_CHARACTERISTIC_UUID)
+        if not characteristics:
+            return None
+        raw_value = characteristics[0].read()
+        value = raw_value.decode("utf-8", errors="ignore").replace("\x00", "").strip()
+        return value or None
+    finally:
+        if peripheral is not None:
+            try:
+                peripheral.disconnect()
+            except Exception:
+                LOGGER.debug("Ignoring peripheral disconnect failure for %s", address, exc_info=True)
 
 
 def _as_float(value: Any) -> float | None:
