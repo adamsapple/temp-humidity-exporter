@@ -2,7 +2,7 @@
   "bind_host": "0.0.0.0",
   "port": 8000,
   "metric_ttl_seconds": 180,
-  "device_name_retry_seconds": 30,
+  "active_scan_ttl_seconds": 30,
   "scan_mode": "passive",
   "log_level": "INFO",
   "default_decoder": "auto",

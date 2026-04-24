@@ -44,6 +44,7 @@ class ScanThread:
         self._store = store
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
+        self._active_scan_until_timestamp: float | None = time.time() + 60.0
 
     def start(self) -> None:
         """Start the scanner thread if it is not already running."""
@@ -77,7 +78,9 @@ class ScanThread:
                 self._store.mark_scan_started()
                 try:
                     LOGGER.info("scan started.")
-                    scanner.scan(self._config.scan_seconds, passive=True)
+                    is_passive = True if self._active_scan_until_timestamp < time.time() else False
+                    LOGGER.info("Scan mode: %s", "passive" if is_passive else "active")
+                    scanner.scan(self._config.scan_seconds, passive=is_passive)
                     self._store.mark_scan_completed()
                     if not self._stop_event.is_set():
                         self._resolve_pending_device_names()
@@ -98,7 +101,7 @@ class ScanThread:
 
     def _resolve_pending_device_names(self) -> None:
         """Resolve missing device names over GATT between scan cycles."""
-        for address, address_type in self._store.device_name_lookup_candidates(self._config.device_name_retry_seconds):
+        for address, address_type in self._store.device_name_lookup_candidates(self._config.active_scan_ttl_seconds):
             if self._stop_event.is_set():
                 return
 
@@ -142,22 +145,24 @@ class _ScanDelegate(DefaultDelegate):
 
         device_address = normalize_mac(getattr(device, "addr", None))
         device_address_type = _device_address_type(device)
-        advertised_name = _device_name(device)
-        if device_address:
-            self._store.observe_device(
-                device_address,
-                address_type=device_address_type,
-                device_name=advertised_name,
-            )
+        
+        # if device_address:
+        #     self._store.observe_device(
+        #         device_address,
+        #         address_type=device_address_type,
+        #         device_name=advertised_name,
+        #     )
 
+        # 広告データ内にpvvx が含まれているかどうか。含まれていない場合は、スキャン対象外。
         payload = extract_pvvx_service_data(device)
         if payload is None:
             return
 
+        # pvvx のペイロードをデコード。失敗した場合はスキャン対象外。
         decoded = decode_pvvx_service_data(payload)
         if decoded is None:
             return
-
+        
         payload_address = normalize_mac(decoded.get("address"))
         sensor = self._resolve_sensor(device_address, payload_address)
         if sensor is None:
@@ -193,7 +198,7 @@ class _ScanDelegate(DefaultDelegate):
             rssi=_as_int(getattr(device, "rssi", None)),
         )
         self._store.update(reading)
-        LOGGER.info("Updated reading for %s: %s", address, reading.to_dict())
+        #LOGGER.info("Updated reading for %s: %s", address, reading.to_dict())
 
     def _resolve_sensor(self, *addresses: str | None) -> SensorConfig | None:
         """Match an observed device to configured sensors or synthesize one in auto-discovery mode."""
@@ -235,6 +240,7 @@ def _device_name(device: Any) -> str | None:
     for ad_type in (9, 8):
         value = device.getValueText(ad_type)
         if value:
+            LOGGER.info("%s Checking for device name in ad type %d: %s", device.addr, ad_type, value)
             return str(value)
     return None
 
