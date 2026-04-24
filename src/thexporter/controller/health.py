@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
+
 from ..config import Config
+from ..constants import LOGGER_NAME
 from ..scandata import ScanDataStore
 from ..scanthread import ScanThread
 
+LOGGER = logging.getLogger(LOGGER_NAME)
 
 def render_health(config: Config, store: ScanDataStore, scanner: ScanThread) -> tuple[str, int]:
     """Return a minimal health body and HTTP status for external monitoring."""

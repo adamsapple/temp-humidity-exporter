@@ -66,7 +66,16 @@ class ScanDataStore:
         """Return a shallow copy of all currently cached readings."""
         with self._lock:
             return dict(self._readings)
+    
+    def sensor_reading(self, address:str) -> SensorReading | None:
+        """adressをキーとしたセンサーの最新の読み取り値を返す。
 
+        """
+        with self._lock:
+            if address not in self._readings:
+                return None
+            return self._readings[address]
+        
     def status_snapshot(self) -> ScanStatus:
         """Return a copy of the current scanner status."""
         with self._lock:

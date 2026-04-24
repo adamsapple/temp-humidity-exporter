@@ -29,12 +29,12 @@ def build_metrics(store: ScanDataStore, config: Config) -> str:
     ]
 
     sensors = config.sensors or {
-        address: SensorConfig(
-            address=reading.address,
-            name=reading.name,
-            decoder=reading.decoder,
-        )
-        for address, reading in readings.items()
+        # address: SensorConfig(
+        #     address=reading.address,
+        #     #name=reading.name,
+        #     decoder=reading.decoder,
+        # )
+        # for address, reading in readings.items()
     }
 
     if not sensors:
@@ -69,7 +69,7 @@ def build_metrics(store: ScanDataStore, config: Config) -> str:
         reading = readings.get(sensor.address)
         labels = {
             "address": sensor.address,
-            "sensor_name": sensor.name,
+            #"sensor_name": sensor.name,
             "decoder": reading.decoder if reading else sensor.decoder,
             "material": sensor.material,
             "color": sensor.color,

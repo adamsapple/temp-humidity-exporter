@@ -14,7 +14,6 @@ class SensorConfig:
     """Static configuration for a single BLE thermometer."""
 
     address: str
-    name: str
     decoder: str = "auto"
     material: str = "unknown"
     color: str = "#FFFFFF"
@@ -31,7 +30,6 @@ class Config:
     metric_ttl_seconds: int = 180
     active_scan_ttl_seconds: int = 30
     default_decoder: str = "auto"
-    default_sensor_name: str = "pvvx"
     default_material: str = "unknown"
     default_color: str = "unknown"
     config_path: str = DEFAULT_CONFIG_PATH
@@ -52,12 +50,10 @@ class Config:
             default_decoder     = _normalize_decoder(
                                     _config_or_default("default_decoder", file_config, "auto")
                                   ),
-            default_sensor_name =_config_or_default("default_sensor_name", file_config, "pvvx"),
             config_path = config_path,
         )
         config.sensors = _load_sensor_configs(
             file_config.get("sensors"),
-            config.default_sensor_name,
             config.default_decoder,
             config.default_material,
             config.default_color
@@ -104,7 +100,6 @@ def _load_file_config(config_path: str) -> tuple[dict[str, Any], str]:
 
 def _load_sensor_configs(
     file_sensors: Any,
-    default_name: str,
     default_decoder: str,
     default_material: str,
     default_color: str,
@@ -112,12 +107,11 @@ def _load_sensor_configs(
     """Resolve sensor definitions from env, config file, or legacy single-MAC settings."""
     
     if file_sensors is not None:
-        return _parse_sensor_configs(file_sensors, default_name, default_decoder, default_material, default_color, "config.json sensors")
+        return _parse_sensor_configs(file_sensors, default_decoder, default_material, default_color, "config.json sensors")
 
 
 def _parse_sensor_configs(
     raw_items: Any,
-    default_name: str,
     default_decoder: str,
     default_material: str,
     default_color: str,
@@ -135,23 +129,22 @@ def _parse_sensor_configs(
         address = normalize_mac(item.get("mac") or item.get("address"))
         if not address:
             raise ValueError(f"{source_name} item #{index} is missing mac/address")
-
-        name     = str(item.get("name") or f"{default_name}_{index}")
+        address  = address
         decoder  = _normalize_decoder(item.get("decoder") or default_decoder)
         material = str(item.get("material") or default_material)
         color    = str(item.get("color") or default_color)
-        sensors[address] = SensorConfig(address=address, name=name, decoder=decoder, material=material, color=color)
+        sensors[address] = SensorConfig(address=address, decoder=decoder, material=material, color=color)
     return sensors
 
 
-def _config_or_default(name: str, file_config: dict[str, Any], default: str) -> str:
-    value = file_config.get(name)
+def _config_or_default(key: str, file_config: dict[str, Any], default: str) -> str:
+    value = file_config.get(key)
     return value if value else default
 
-def _config_or_default_int(name: str, file_config: dict[str, Any], default: int) -> int:
-    value = file_config.get(name)
+def _config_or_default_int(key: str, file_config: dict[str, Any], default: int) -> int:
+    value = file_config.get(key)
     return int(value) if value else default
 
-def _config_or_default_float(name: str, file_config: dict[str, Any], default: float) -> float:
-    value = file_config.get(name)
+def _config_or_default_float(key: str, file_config: dict[str, Any], default: float) -> float:
+    value = file_config.get(key)
     return float(value) if value else default

@@ -42,6 +42,7 @@ class ScanThread:
         self._store = store
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
+        self._active_scan_until_timestamp: float | None = time.time() + config.active_scan_ttl_seconds
 
     def start(self) -> None:
         """Start the scanner thread if it is not already running."""
@@ -58,6 +59,11 @@ class ScanThread:
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=max(5.0, self._config.scan_seconds + 1.0))
+    
+    def reserve_active_scan(self) -> None:
+        """Extend the active scan period to ensure the next scan cycle is active."""
+        LOGGER.info("Reserving active scan for the next %d seconds.", self._config.active_scan_ttl_seconds)
+        self._active_scan_until_timestamp = time.time() + self._config.active_scan_ttl_seconds
 
     def is_running(self) -> bool:
         """Return whether the scanner thread is currently alive."""
@@ -68,14 +74,15 @@ class ScanThread:
         self._store.mark_running(True)
         if not has_scan_permissions():
             _print_permission_guidance("Preflight warning")
-        scanner = Scanner().withDelegate(_ScanDelegate(self._config, self._store))
-
+        scanner = Scanner().withDelegate(_ScanDelegate(self, self._config, self._store))
+        self.reserve_active_scan()
         try:
             while not self._stop_event.is_set():
                 self._store.mark_scan_started()
                 try:
-                    LOGGER.info("scan started.")
-                    scanner.scan(self._config.scan_seconds, passive=True)
+                    is_passive = True if self._active_scan_until_timestamp < time.time() else False
+                    LOGGER.info("scan started(mode: %s).", "passive" if is_passive else "active")
+                    scanner.scan(self._config.scan_seconds, passive=is_passive)
                     self._store.mark_scan_completed()
                 except BTLEException as exc:
                     LOGGER.error("BLE scan error: %s", exc)
@@ -96,11 +103,12 @@ class ScanThread:
 class _ScanDelegate(DefaultDelegate):
     """Receive bluepy discovery callbacks and translate them into SensorReading objects."""
 
-    def __init__(self, config: Config, store: ScanDataStore) -> None:
+    def __init__(self, thread: ScanThread, config: Config, store: ScanDataStore) -> None:
         """Remember configuration and shared store used by discovery callbacks."""
         super().__init__()
+        self._thread = thread
         self._config = config
-        self._store = store
+        self._store  = store
 
     def handleDiscovery(self, device: Any, isNewDev: bool, isNewData: bool) -> None:
         """Decode supported advertisements and push fresh values into the store."""
@@ -115,36 +123,52 @@ class _ScanDelegate(DefaultDelegate):
         if decoded is None:
             return
 
-        device_address = normalize_mac(getattr(device, "addr", None))
-        payload_address = normalize_mac(decoded.get("address"))
-        sensor = self._resolve_sensor(device_address, payload_address)
-        if sensor is None:
-            return
+        #device_address = normalize_mac(getattr(device, "addr", None))
+        #payload_address = normalize_mac(decoded.get("address"))
+        #sensor = self._resolve_sensor(device_address, payload_address)
+        #if sensor is None:
+        #    return
 
         # When sensors are configured, use the configured address as the canonical label key.
-        address = sensor.address if self._config.sensors else (payload_address or device_address or sensor.address)
-        configured_name = None if not self._config.sensors else sensor.name
+        #address = sensor.address if self._config.sensors else (payload_address or device_address or sensor.address)
+        #//configured_name = None if not self._config.sensors else sensor.name
         # Prefer the configured display name, otherwise try the BLE local name, then fall back to a synthetic name.
-        name = configured_name or _device_name(device) or self._fallback_name(address)
+        
+        address = device.addr.upper()
+        name    = _device_name(device)
+        
+        # 名前がNoneならば、_storeを探す。それもNoneなら、active scanを予約することで、
+        # ScanResponseからLocalNameを取得することを狙う。
+        if name is None:
+            record = self._store.sensor_reading(address)
+            if record and record.name:
+                name = record.name
+            else:
+                LOGGER.info("reserve_active_scan  %s : %s", address, record is not None)
+                self._thread.reserve_active_scan()
+        else:
+            LOGGER.info("Device %s has local name: %s", address, name)
+        
         reading = SensorReading(
-            address=address,
-            name=name,
-            decoder=str(decoded["decoder"]),
-            temperature_celsius=_as_float(decoded.get("temperature_celsius")),
-            humidity_percent=_as_float(decoded.get("humidity_percent")),
-            battery_percent=_as_float(decoded.get("battery_percent")),
-            battery_voltage_volts=_as_float(decoded.get("battery_voltage_volts")),
-            packet_counter=_as_int(decoded.get("packet_counter")),
-            flags=_as_int(decoded.get("flags")),
-            rssi=_as_int(getattr(device, "rssi", None)),
+            address = address,
+            name    = name,
+            decoder = str(decoded["decoder"]),
+            temperature_celsius   = _as_float(decoded.get("temperature_celsius")),
+            humidity_percent      = _as_float(decoded.get("humidity_percent")),
+            battery_percent       = _as_float(decoded.get("battery_percent")),
+            battery_voltage_volts = _as_float(decoded.get("battery_voltage_volts")),
+            packet_counter        = _as_int(decoded.get("packet_counter")),
+            flags   = _as_int(decoded.get("flags")),
+            rssi    = _as_int(getattr(device, "rssi", None)),
         )
         self._store.update(reading)
-        LOGGER.info("Updated reading for %s: %s", address, reading.to_dict())
+        #LOGGER.info("Updated reading for %s: %s", device.addr, reading.to_dict())
 
     def _resolve_sensor(self, *addresses: str | None) -> SensorConfig | None:
         """Match an observed device to configured sensors or synthesize one in auto-discovery mode."""
         normalized_addresses = [address for address in addresses if address]
 
+        # configにアドレスが含まれているか(既知かどうか)
         if self._config.sensors:
             for address in normalized_addresses:
                 sensor = self._config.sensors.get(address)
@@ -152,6 +176,7 @@ class _ScanDelegate(DefaultDelegate):
                     return sensor
             return None
 
+        # 
         address = next((value for value in normalized_addresses if value), None)
         if address is None:
             return None
