@@ -44,6 +44,8 @@ def build_metrics(store: ScanDataStore, config: Config) -> str:
         [
             "# HELP thexporter_sensor_up 1 if a fresh advertisement has been received within the TTL.",
             "# TYPE thexporter_sensor_up gauge",
+            "# HELP thexporter_sensor_info when a stable name is known.",
+            "# TYPE thexporter_sensor_info gauge",
             "# HELP thexporter_last_seen_timestamp_seconds UNIX timestamp of the latest reading.",
             "# TYPE thexporter_last_seen_timestamp_seconds gauge",
             "# HELP thexporter_advertisement_age_seconds Seconds since the latest reading.",
@@ -74,6 +76,18 @@ def build_metrics(store: ScanDataStore, config: Config) -> str:
             "material": sensor.material,
             "color": sensor.color,
         }
+        sensor_name = reading.name
+        if sensor_name:
+            lines.append(
+                _metric_line(
+                    "thexporter_sensor_info",
+                    {
+                        "address": sensor.address,
+                        "name": sensor_name,
+                    },
+                    1,
+                )
+            )
         age_seconds = reading.age_seconds() if reading else float(config.metric_ttl_seconds + 1)
         up = 1 if reading and age_seconds <= config.metric_ttl_seconds else 0
 
