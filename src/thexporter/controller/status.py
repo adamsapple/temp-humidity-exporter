@@ -13,7 +13,6 @@ def build_status_payload(config: Config, store: ScanDataStore, scanner: ScanThre
     sensors = config.sensors or {
         address: SensorConfig(
             address=reading.address,
-            name=reading.name,
             decoder=reading.decoder,
         )
         for address, reading in readings.items()
@@ -25,7 +24,6 @@ def build_status_payload(config: Config, store: ScanDataStore, scanner: ScanThre
         devices.append(
             {
                 "address": sensor.address,
-                "name": sensor.name,
                 "configured_decoder": sensor.decoder,
                 "last_reading": reading.to_dict() if reading else None,
                 "healthy": bool(reading and reading.age_seconds() <= config.metric_ttl_seconds),
